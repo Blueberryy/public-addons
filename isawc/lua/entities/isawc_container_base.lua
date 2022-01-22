@@ -79,7 +79,7 @@ function ENT:Initialize()
 		if IsValid(physobj) then
 			physobj:Wake()
 			if ISAWC.ConAutoHealth:GetFloat() > 0 and self:GetContainerHealth()==0 then
-				self:SetContainerHealth(math.max(math.Round(physobj:GetVolume()*0.001*ISAWC.ConAutoHealth:GetFloat(),-1),10))
+				self:SetContainerHealth(math.max(math.Round(physobj:GetVolume()/1e3*ISAWC.ConAutoHealth:GetFloat(),-1),10))
 			end
 		end
 		self:PrecacheGibs()
@@ -238,8 +238,6 @@ function ENT:Use(activator,caller,typ,data)
 				if table.IsEmpty(self.ISAWC_PlayerLocalizedInventories) then
 					self.ISAWC_PlayerLocalizedInventories = data.ISAWC_PlayerLocalizedInventories or {}
 				end
-			elseif file.Exists("isawc_containers/"..chosenFileID..".dat","DATA") then
-				self.ISAWC_Inventory = util.JSONToTable(util.Decompress(file.Read("isawc_containers/"..chosenFileID..".dat") or "")) or {}
 			end
 		end
 		if ISAWC:IsLegalContainer(self, activator, true) then
@@ -350,7 +348,7 @@ function ENT:Think()
 			while invalid do
 				local chosenFileID = GenStringFile()
 				local result = ISAWC:SQL("SELECT \"containerID\" FROM \"isawc_container_data\" WHERE \"containerID\" = %s;", chosenFileID)
-				invalid = file.Exists("isawc_containers/"..chosenFileID..".dat","DATA") or container_ents[chosenFileID] or (result and next(result))
+				invalid = container_ents[chosenFileID] or (result and next(result))
 				if not invalid then
 					self:SetFileID(chosenFileID)
 				end
@@ -483,13 +481,13 @@ function ENT:GetInventory(ply)
 	end
 end
 
-hook.Add("canLockpick", "ISAWC X DarkRP", function(ply, ent, trace)
+hook.Add("canLockpick", "ISAWC × DarkRP", function(ply, ent, trace)
 	if ent.Base == "isawc_container_base" then
 		return ISAWC.ConLockpickTime:GetFloat() >= 0 and ent:GetLockMul() > 0 and not ent:GetIsPublic()
 	end
 end)
 
-hook.Add("lockpickTime", "ISAWC X DarkRP", function(ply, ent)
+hook.Add("lockpickTime", "ISAWC × DarkRP", function(ply, ent)
 	if ent.Base == "isawc_container_base" then
 		local averageTime = ISAWC.ConLockpickTime:GetFloat()
 		
@@ -505,8 +503,9 @@ hook.Add("lockpickTime", "ISAWC X DarkRP", function(ply, ent)
 	end
 end)
 
-hook.Add("onLockpickCompleted", "ISAWC X DarkRP", function(ply, success, ent)
+hook.Add("onLockpickCompleted", "ISAWC × DarkRP", function(ply, success, ent)
 	if ent.Base == "isawc_container_base" and success then
 		ent:SetIsPublic(true)
+		ISAWC:SendInventory2(ply,ent)
 	end
 end)
