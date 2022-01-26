@@ -111,12 +111,15 @@ function ENT:Initialize()
 		if creator:IsPlayer() and self:GetOwnerAccountID()==0 then
 			self:SetOwnerAccountID(creator:AccountID() or 0)
 		end
-		-- compatibility, remove for version 5.0.0+
-		if self:GetPlayerTeam()~=0 then
-			self:SetTeam(self:GetPlayerTeam())
-		end
+		self:CheckAndCopyFromEnderContainer()
 	end
 	
+	self.MagnetScale = self:BoundingRadius()
+	self.NextRegenThink = CurTime()
+	self.MagnetTraceResult = {}
+end
+
+function ENT:CheckAndCopyFromEnderContainer()
 	local endername = self:GetEnderInvName()
 	if (endername or "")~="" then
 		local invNeedsLoad = table.IsEmpty(self.ISAWC_Inventory)
@@ -134,9 +137,6 @@ function ENT:Initialize()
 			end
 		end
 	end
-	self.MagnetScale = self:BoundingRadius()
-	self.NextRegenThink = CurTime()
-	self.MagnetTraceResult = {}
 end
 
 function ENT:InterpretAdditionalAccess(accessStr, ply)
@@ -207,6 +207,7 @@ function ENT:PickUpTouchedProp(ent)
 				or player.GetByAccountID(self:GetOwnerAccountID())
 			)
 			ISAWC:PropPickup(self,ent,pickupPlayer)
+			ISAWC:UpdateContainerInventories(self)
 			ISAWC:SaveContainerInventory(self)
 		end
 	end
@@ -223,6 +224,7 @@ function ENT:Use(activator,caller,typ,data)
 		if self:GetOwnerAccountID()==0 then
 			self:SetOwnerAccountID(activator:AccountID() or 0)
 		end
+		self:CheckAndCopyFromEnderContainer()
 		if SERVER and ISAWC.ConSaveIntoFile:GetBool() and (table.IsEmpty(self.ISAWC_Inventory) or table.IsEmpty(self.ISAWC_PlayerLocalizedInventories)) then
 			local chosenFileID = self:GetFileID()
 			local result = ISAWC:SQL("SELECT \"containerID\", \"data\" FROM \"isawc_container_data\" WHERE \"containerID\" = %s;", chosenFileID)
@@ -288,7 +290,7 @@ function ENT:OnTakeDamage(dmginfo)
 end
 
 function ENT:OnRemove()
-	if SERVER and self.ISAWC_Inventory and ISAWC.ConDropOnDeathContainer:GetBool() then
+	if SERVER and ISAWC.ConDropOnDeathContainer:GetBool() and (IsValid(self) and self.ISAWC_Inventory) then
 		local ply = player.GetByAccountID(self:GetOwnerAccountID())
 		if IsValid(ply) then
 			ISAWC:SetSuppressUndo(true)
@@ -299,14 +301,22 @@ function ENT:OnRemove()
 				end
 			end
 			ISAWC:SetSuppressUndo(false)
-			table.Empty(self.ISAWC_Inventory)
-			ISAWC:SaveContainerInventory(self)
+			
+			-- a restart would've triggered this, clearing out container inventories before they get saved
+			--table.Empty(self.ISAWC_Inventory)
+			--ISAWC:SaveContainerInventory(self)
+			
+			-- instead, keep our inventory, but signal others that we've been cleared out
+			local tempInv = self.ISAWC_Inventory
+			self.ISAWC_Inventory = {}
+			ISAWC:UpdateContainerInventories(self)
+			self.ISAWC_Inventory = tempInv
 		else
 			ISAWC:Log(string.format("Warning! Owner of container %s was missing, so items couldn't be dropped!", tostring(self)))
 		end
-		if self.ISAWC_OnRemove then
-			self:ISAWC_OnRemove()
-		end
+	end
+	if self.ISAWC_OnRemove then
+		self:ISAWC_OnRemove()
 	end
 end
 

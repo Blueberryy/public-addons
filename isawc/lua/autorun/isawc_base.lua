@@ -10,8 +10,8 @@ Links above are confirmed working as of 2021-06-21. All dates are in ISO 8601 fo
 local startLoadTime = SysTime()
 
 ISAWC = ISAWC or {}
-ISAWC._VERSION = "5.0.0-beta.1"
-ISAWC._VERSIONDATE = "2022-01-22"
+ISAWC._VERSION = "5.0.0-beta.2"
+ISAWC._VERSIONDATE = "2022-01-26"
 
 if SERVER then util.AddNetworkString("isawc_general") end
 
@@ -2735,6 +2735,7 @@ ISAWC.SendInventory2 = function(self,ply,container)
 		net.WriteUInt(stats[i],16)
 	end
 	net.Send(ply)
+	ISAWC:UpdateContainerInventories(container)
 	ISAWC:SaveContainerInventory(container)
 end
 
@@ -2918,20 +2919,10 @@ end
 ISAWC.SaveContainerInventory = function(self,container)
 	container:SendInventoryUpdate()
 	local inv = {ISAWC_Inventory = container.ISAWC_Inventory, ISAWC_PlayerLocalizedInventories = container.ISAWC_PlayerLocalizedInventories}
-	local endername = container:GetEnderInvName()
-	if (endername or "")~="" then
-		for k,v in pairs(ents.GetAll()) do
-			if (v.Base=="isawc_container_base" and v:GetEnderInvName()==endername) then
-				v.ISAWC_Inventory = container.ISAWC_Inventory
-				v.ISAWC_PlayerLocalizedInventories = container.ISAWC_PlayerLocalizedInventories
-				v:SendInventoryUpdate()
-			end
-		end
-	end
-	if self:RemoveRecursions(inv) then
-		self:Log("Warning! " .. tostring(container) .. " had an item with recursive tables! This may cause errors to occur!")
-	end
 	if self.ConSaveIntoFile:GetBool() then
+		if self:RemoveRecursions(inv) then
+			self:Log("Warning! " .. tostring(container) .. " had an item with recursive tables! This may cause errors to occur!")
+		end
 		if container:GetFileID() == "" then
 			self:Log("Warning! " .. tostring(container) .. " failed to save as no ID was associated with the container!")
 		else
@@ -2954,6 +2945,20 @@ ISAWC.SaveContainerInventory = function(self,container)
 				self:SQL("INSERT INTO \"isawc_container_data\" (\"containerID\", \"data\") VALUES (%s, %s);", container:GetFileID(), data)
 			else
 				self:SQL("DELETE FROM \"isawc_container_data\" WHERE \"containerID\" = %s;", container:GetFileID())
+			end
+		end
+	end
+end
+
+ISAWC.UpdateContainerInventories = function(self,container)
+	local endername = container:GetEnderInvName()
+	if (endername or "")~="" then
+		for k,v in pairs(ents.GetAll()) do
+			if v~=container and (v.Base=="isawc_container_base" and v:GetEnderInvName()==endername) then
+				v.ISAWC_Inventory = container.ISAWC_Inventory
+				v.ISAWC_PlayerLocalizedInventories = container.ISAWC_PlayerLocalizedInventories
+				v:SendInventoryUpdate()
+				ISAWC:SaveContainerInventory(v)
 			end
 		end
 	end
@@ -4471,6 +4476,10 @@ ISAWC.PropPickup = function(self,ply,ent,container)
 			v:SetMoveType(MOVETYPE_NONE)
 			self.StoredInAltSaveProps[v] = true
 		else
+			-- clear out inventories to prevent item duplication
+			if v.ISAWC_Inventory then
+				v.ISAWC_Inventory = {}
+			end
 			v:Fire("Kill")
 		end
 	end
